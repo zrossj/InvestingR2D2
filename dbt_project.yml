@@ -1,0 +1,16 @@
+name: b3_new
+
+
+profile: investment_wallet
+
+
+model-paths: ['models']
+
+
+models:
+  b3_new:
+    staging:
+      +materialized: table
+    
+    intermediate:
+      +materialized: table

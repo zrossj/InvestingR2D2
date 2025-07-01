@@ -1,0 +1,10 @@
+version: 2  
+
+sources:
+  - name: raw_data_table
+    database: foo
+    schema: public
+    description: foo databases;
+    tables:
+      - name: b3_raw_ops
+        description: This table contains the data downloaded by the B3 with the orders that were executed in a raw state;

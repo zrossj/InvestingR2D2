@@ -1,0 +1,6 @@
+main_notebook.ipynb
+.vscode/
+profiles.yml
+target/
+app.properties
+old/

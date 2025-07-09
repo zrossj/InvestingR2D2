@@ -5,11 +5,11 @@ from sqlalchemy import text
 from jproperties import Properties
 from datetime import timedelta
 from app.db_conn import connect_db as cdb
-import app.holidays as hd
+from app.holidays import holidays
 from datetime import timedelta 
+import datetime as dt
+from app.holidays import get_settlement_date
 
-
-# %%
 
 
 ### vamos identificar o usuario como id_carteira. Vamos quantificar com aportes para saber o cpaital aplicado e posuir um sistema de conta-corrente; 
@@ -20,7 +20,6 @@ from datetime import timedelta
 # por hora, tratar somente bolsa, marcando-a como renda variavle-bolsa. Depois, vamos permitir que a RF seja colocada junto;
 
 
-# %%
 
 db = cdb()
 
@@ -33,14 +32,14 @@ with db.engine.connect() as conn:
 df_ops = pd.DataFrame(data)
 df_ops.loc[:, 'date_op'] = pd.to_datetime(df_ops.loc[:, 'date_op'])
 
-# %%
 df_ops.head(3)
 
-# %%
+
 ### holidays and dates;
 
 
-holidays = hd.holidays()
+
+holidays = holidays()
 
 
 # %% [markdown]
@@ -83,7 +82,7 @@ class Wallet:
             * 
             FROM wallet w 
             WHERE w.date = '{date}'
-            AND id = {self.wallet_id}
+            AND wallet_id = {self.wallet_id}
             """)
             )
 
@@ -102,7 +101,7 @@ class Wallet:
             * 
             FROM wallet w 
             WHERE w.date = (SELECT MAX(date) from wallet)
-            AND w.id = {self.wallet_id}
+            AND w.wallet_id = {self.wallet_id}
             """)
             )
         
@@ -111,8 +110,13 @@ class Wallet:
         return self.last_position
 
 
-    def get_operations(self, date):
-
+    def get_operations(self, date: str = '19901231'):
+        
+        """
+        Parameters:
+            date:str (optional) -> if not specified, will return all operations that are more recent than 1990-12-31
+        """
+        
         with self.engine.connect() as conn:
                 
             data = conn.execute(text(
@@ -120,7 +124,7 @@ class Wallet:
             SELECT *
             FROM 
             int_b3_ops ibo 
-            where ibo.date_op > '{date}'
+            where ibo.date_op >= '{date}'
             """
             ))
 
@@ -129,77 +133,109 @@ class Wallet:
         return self.df_op
     
 
-    def update_position(self):
+    def update_position(self, end_date: str = None):
+        
+        """
+        This will advance the position processing newer transactions than the last available date. Use end_date to advance for a specific date; the default will advance till the day of the latest order
+        Parameters:
+            end_date: str 'yyyymmdd' (optional)
+        """
+
+        cashflow = Cashflow(self.wallet_id)
 
         # we need -> the last position and all the operations that were closed after that date.
-
         df_lp = self.get_last_position()
-
-
+        
         # FILTER OPERATIONS;
         if not df_lp.empty:
-            date = df_lp['date'].loc[0] # holds the latest date which a position snapshot exists.
-            date_str = date.strftime('%Y%m%d')
+            last_processed_date = df_lp['date'].loc[0] # holds the latest date which a position snapshot exists.
+            start_date = last_processed_date + timedelta(days=1)
+            start_date_str = start_date.strftime('%Y%m%d')
+            df_op = self.get_operations(start_date_str)
 
-        else:
-            date_str = '20010101' # arbritary, i'm not expecting nothing more old than that.
+        else: 
+            df_op = self.get_operations()
+            start_date = df_op.date_op.min()
+            
+        if df_op.empty and end_date == None:
 
-        df_op = self.get_operations(date= date_str)
+            return print('There is no recently data to processes neither a end_date was specified')
+        
+        elif end_date != None:
+            # new transactions will be processed and position updated till end_date
+            end_date = dt.datetime.strptime(end_date, '%Y%m%d').date()
+            
+        else: 
+            # means end_date not specified and there is new transactions
+            end_date = df_op.date_op.max()
 
-        if df_lp.empty:
-            min_date = df_op.date_op.min()
-        else:
-            min_date = date + timedelta(days=1)
-        op_date_range = pd.date_range(min_date, df_op.date_op.max(), freq='D')
+        op_date_range = pd.date_range(start_date, end_date, freq='D')
         op_date_range = [date.date() for date in op_date_range] # transform timestamp in datetime.date
+
 
         # LOOP THROUGH DATE INTERVAL
         for op_date in op_date_range:
 
             df_lp = self.get_last_position()    # for every loop, refresh our position as we're going to write in the database for each iteration.
-            df_op_temp = df_op[df_op.date_op == op_date] # sub dataframe;
+            
+            if not df_op.empty:
+                df_op_temp = df_op[df_op.date_op == op_date] # sub dataframe;
+        
 
             if not df_lp.empty: # we start clonning the last position
-                
                 df_lp.date = op_date
                 df_lp.to_sql(name = 'wallet', con = self.engine, schema='public', if_exists='append', index = False)
 
             #-------
-            if df_op_temp.empty:  # skipped, lp was clonned to today's
-                next
+            if df_op.empty:  # skipped, lp was clonned to today's
+                print(f'{op_date}, D-1 position clonned')
+                next             
                 
             else:
+
                 for index, row in df_op_temp.iterrows():
 
+                    op_id = row.id
                     op_asset = row.asset
                     op_qtty = row.quantity
                     op_value = row.value
                     op_broker = row.brokerage_firm_id
-                    op_id = row.id
+                    op_wallet_id = row.wallet_id
 
                     if row.movement == 'Venda':       # signal ajustm. for sell op.
                         op_qtty, op_value = -op_qtty, -op_value
                     else:
                         None # its a buy
 
+                    # Finance involved with the operation
+                    
+                    cashflow.trade_settlement(1011,9,101, 1, 
+                                            op_date, op_value, op_id)
 
+
+                    df_lp= self.get_last_position() # refresh
+                    
                     if df_lp.empty:  # means its running for the first time. So, just put the first row as a position;
                         
-                        #print('First time running the code - first row will be added directly to the wallet')
-                        df = pd.DataFrame(row).T[['date_op', 'id', 'brokerage_firm_id', 'asset', 'quantity', 'pu', 'value']]
+                        print('First time running the code - first row will be added directly to the wallet')
+                        df = pd.DataFrame(row).T[['date_op', 'wallet_id', 'brokerage_firm_id', 'asset', 'quantity', 'pu', 'value']]
                         df = df.rename(columns = {'date_op': 'date'})
                         df.to_sql('wallet', self.engine, if_exists = 'append', schema = 'public', index = False)
                         next
 
-                    else: # 2 options
+                    else: # 2 options - new asset or update existing asset
+                        
 
-                        if (op_broker, op_asset, op_id) in df_lp.loc[:, ['brokerage_firm_id', 'asset', 'id']].values:
+                        # option 1 - update asset;
+                        if (op_broker, op_asset, op_wallet_id) in df_lp.loc[:, ['brokerage_firm_id', 'asset', 'wallet_id']].values:
 
                             print('asset under position - updating')
                             df_lp_filt = df_lp.where(
-                                (df_lp.brokerage_firm_id == op_broker) & (df_lp.asset == op_asset) & (df_lp.id == op_id)
+                                (df_lp.brokerage_firm_id == op_broker) & (df_lp.asset == op_asset) & (df_lp.wallet_id == op_wallet_id)
                             ).dropna()
                             
+                            assert df_lp_filt.empty == False
+
                             new_qtty = df_lp_filt.quantity.iloc[0] + op_qtty
                             new_value = df_lp_filt.value.iloc[0] + op_value
                             new_pu = new_value / new_qtty
@@ -220,12 +256,14 @@ class Wallet:
                                 )
                                 conn.execute(query)
                                 conn.commit()
-                        
-                        else: # we don't have on wallet - so add
+                            print(f'{op_date} - {op_asset}, position updated')
 
-                            df = pd.DataFrame(row).T[['date_op', 'id', 'brokerage_firm_id', 'asset', 'quantity', 'pu', 'value']]
+                        else: # option 2 - add new asset;
+
+                            df = pd.DataFrame(row).T[['date_op', 'wallet_id', 'brokerage_firm_id', 'asset', 'quantity', 'pu', 'value']]
                             df = df.rename(columns = {'date_op': 'date'})
                             df.to_sql('wallet', self.engine, if_exists = 'append', schema = 'public', index = False)    
+                            print(f'{op_date} - {op_asset}, new asset inserted')
 
                     
                     
@@ -234,15 +272,6 @@ class Wallet:
             print('position updated!')
         return None
 
-
-
-class accounts:
-
-    def __init__(self, numero, brokerage_firm, codigo_banco):
-
-        self.numero = numero
-        self.corretora = brokerage_firm
-        self.codigo_banco = codigo_banco
 
 
 class Cashflow:
@@ -282,14 +311,45 @@ class Cashflow:
         return df
     
 
-    def money_transfer(self, account: int, vd: int, bank_id: int, agency: int, date: str, value: float):
+    def trade_settlement(self, account: int, vd: int, bank_id: int, agency: int, op_date: dt.date, op_value: float, op_id: int):
+        """
+        
+        This function is used to register the ins and outs for the bank account related only to operations - buys and sells. 
+        Parameters:
+            df (DataFrame): the dataframe with the operation's data.
+        
+        """
 
+        # the settlement date is D+2 from the operation date - and only working dates - so we need to adjust; 
+        
+        op_settlement_date = get_settlement_date(op_date)
+        value = -1* op_value # oposite 
+
+        with self.engine.connect() as conn:
+
+            query = f"""
+            INSERT INTO 
+            cashflow (
+            wallet_id, account, vd, bank_id, agency, date, value, origem_id) 
+            VALUES (
+            {self.wallet_id}, {account}, {vd}, {bank_id}, {agency}, '{op_settlement_date}', {value}, {op_id})
+            """
+
+            conn.execute(text(query))
+            conn.commit()
+        
+        return None
+    
+
+    def cash_transfer(self, account: int, vd: int, bank_id: int, agency: int, date: str, value: float, origem_id = 'NULL'):
+        
+        
         with self.engine.connect() as conn:
             query = f"""
                 INSERT INTO cashflow (
-                wallet_id, account, vd, bank_id, agency, date, value) 
+                wallet_id, account, vd, bank_id, agency, date, value, origem_id) 
                 VALUES (
-                {self.wallet_id}, {account}, {vd}, {bank_id}, {agency}, '{date}', {value})
+                {self.wallet_id}, {account}, {vd}, {bank_id}, {agency}, '{date}', {value}, {origem_id})
                 """       
             
             conn.execute(text(query))
@@ -298,11 +358,4 @@ class Cashflow:
         
         return None
         
-
-
-
-
-
-
-
 

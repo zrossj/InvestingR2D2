@@ -11,8 +11,9 @@ WITH final as (
 )
 
 select
-to_date(date_op, 'DD-MM-YYYY') as date_op,
 id,
+to_date(date_op, 'DD-MM-YYYY') as date_op,
+wallet_id,
 movement,
 market,
 to_date(
@@ -30,7 +31,7 @@ CASE
 case
 	when market = 'Mercado Fracionário'
 	then SUBSTRING(asset, 1, length(asset)-1)
-	else asset
+	else asset		
 	END	as asset,
 quantity::numeric,
 pu::numeric(6,2),

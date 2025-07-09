@@ -4,8 +4,9 @@ with final as (
 )
 
 SELECT 
+id, 
 "Data do Negócio" as date_op,
-"id",
+"wallet_id",
 "Tipo de Movimentação" as movement,
 "Mercado" as market,
 "Prazo/Vencimento" as expire_date,

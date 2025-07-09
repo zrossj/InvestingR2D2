@@ -1,6 +1,7 @@
 #%%
 import pandas as pd
 import numpy as np
+from datetime import timedelta
 
 
 
@@ -8,28 +9,28 @@ def holidays():
 
     path = './app/feriados_nacionais.xls'
 
-
     df = pd.read_excel(path)
 
     df.loc[:, 'Data'] = pd.to_datetime(df.Data, errors = 'coerce')
 
     df = df.dropna(subset='Data')
 
-    return df.Data.values
+    holidays_array = [x.date() for x in df.Data.values] # conmvert from timestamp to datetime.date
 
 
-    # mask = []
+    return holidays_array
 
-    # for index, row in df.iterrows():
-    #     try:
-    #         np.datetime64(row.Data)
-    #         mask.append(True)
-    #     except:
-    #         mask.append(False)
 
-    # df = df[mask]
 
-    # return df.Data.values
+def get_settlement_date(date, holidays=holidays()):
+
+    settle_date = date + timedelta(2)
+
+    while settle_date in holidays or settle_date.weekday() in(5,6):
+        settle_date+= timedelta(days=1)
+
+    return settle_date
+
 
 
 

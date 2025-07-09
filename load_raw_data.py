@@ -1,11 +1,10 @@
-#%%
 import pandas as pd
 from sqlalchemy import text, create_engine
 from jproperties import Properties
 import numpy as np
 
 
-trade_file_name = 'trades.xlsx'     # the name of the file donwloaded from B3
+trade_file_name = 'trades2.xlsx'     # the name of the file donwloaded from B3
 
 id  = input('Type the client ID: ')
 id = int(id)
@@ -52,10 +51,9 @@ if db_exists:
         ) == 0, "Your data have insertecting dates within the database - please verify"
 
 
-df['id'] = id
+df['wallet_id'] = id
 
 
 df.to_sql('b3_raw_ops', engine, if_exists='append', index = False) # injection
 print('Data inserted sucessfully')
 
-#%%

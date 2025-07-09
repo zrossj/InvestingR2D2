@@ -136,9 +136,8 @@ class Wallet:
     def update_position(self, end_date: str = None):
         
         """
-        This will advance the position processing newer transactions than the last available date. Use end_date to advance for a specific date; the default will advance till the day of the latest order
         Parameters:
-            end_date: str 'yyyymmdd' (optional)
+            end_date: str 'yyyymmdd'
         """
 
         cashflow = Cashflow(self.wallet_id)
@@ -146,52 +145,42 @@ class Wallet:
         # we need -> the last position and all the operations that were closed after that date.
         df_lp = self.get_last_position()
         
-        # FILTER OPERATIONS;
+        # FILTER OPERATIONS AND SET UP START DATE AND END DATE FOR PROCESSING;
         if not df_lp.empty:
             last_processed_date = df_lp['date'].loc[0] # holds the latest date which a position snapshot exists.
             start_date = last_processed_date + timedelta(days=1)
             start_date_str = start_date.strftime('%Y%m%d')
             df_op = self.get_operations(start_date_str)
 
-        else: 
+        else:
             df_op = self.get_operations()
             start_date = df_op.date_op.min()
-            
-        if df_op.empty and end_date == None:
-
-            return print('There is no recently data to processes neither a end_date was specified')
         
-        elif end_date != None:
-            # new transactions will be processed and position updated till end_date
-            end_date = dt.datetime.strptime(end_date, '%Y%m%d').date()
-            
-        else: 
-            # means end_date not specified and there is new transactions
-            end_date = df_op.date_op.max()
+        end_date = dt.datetime.strptime(end_date, '%Y%m%d').date()          
 
+        if start_date > end_date:
+            print('Position is already up to this date. Nothing to process')
+
+        # DATE RANGE FOR PROCESSING
         op_date_range = pd.date_range(start_date, end_date, freq='D')
         op_date_range = [date.date() for date in op_date_range] # transform timestamp in datetime.date
-
 
         # LOOP THROUGH DATE INTERVAL
         for op_date in op_date_range:
 
-            df_lp = self.get_last_position()    # for every loop, refresh our position as we're going to write in the database for each iteration.
+            df_lp = self.get_last_position()    # for every loop, refresh our position.
             
-            if not df_op.empty:
-                df_op_temp = df_op[df_op.date_op == op_date] # sub dataframe;
-        
-
-            if not df_lp.empty: # we start clonning the last position
+            if not df_lp.empty: # start clonning the last position
                 df_lp.date = op_date
                 df_lp.to_sql(name = 'wallet', con = self.engine, schema='public', if_exists='append', index = False)
 
-            #-------
-            if df_op.empty:  # skipped, lp was clonned to today's
+            if df_op.empty:  # skip, lp was clonned to the current date
                 print(f'{op_date}, D-1 position clonned')
-                next             
-                
+                next        
+
             else:
+                # FILTER OPs BASED ON CURRENT DATE OF PROCESSING 
+                df_op_temp = df_op[df_op.date_op == op_date] # sub dataframe; 
 
                 for index, row in df_op_temp.iterrows():
 
@@ -204,8 +193,6 @@ class Wallet:
 
                     if row.movement == 'Venda':       # signal ajustm. for sell op.
                         op_qtty, op_value = -op_qtty, -op_value
-                    else:
-                        None # its a buy
 
                     # Finance involved with the operation
                     
@@ -271,7 +258,6 @@ class Wallet:
             
             print('position updated!')
         return None
-
 
 
 class Cashflow:
@@ -358,4 +344,5 @@ class Cashflow:
         
         return None
         
+
 

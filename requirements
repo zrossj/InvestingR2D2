@@ -5,4 +5,6 @@ SQLAlchemy==2.0.41
 psycopg2-binary==2.9.10
 openpyxl==3.1.5
 dbt-core==1.10.1
+dbt-postgres==1.9.0
 xlrd==2.0.2
+yfinance==0.2.64

@@ -3,3 +3,4 @@ profiles.yml
 target/
 app.properties
 old/
+app/__pycache__/

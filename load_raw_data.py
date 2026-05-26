@@ -1,10 +1,14 @@
+#%%
 import pandas as pd
 from sqlalchemy import text, create_engine
 from jproperties import Properties
 import numpy as np
 
 
-trade_file_name = 'trades2.xlsx'     # the name of the file donwloaded from B3
+trade_file_name = './'     # the name of the file donwloaded from B3
+file_name = input("Type the file name containing the transactions history (must be in this folder): ")
+trade_file_name = trade_file_name + file_name 
+
 
 id  = input('Type the client ID: ')
 id = int(id)
@@ -23,23 +27,23 @@ engine = create_engine(uri)
 # read with pandas; 
 
 df = pd.read_excel(trade_file_name, 
-                 header = 0, engine = 'openpyxl')
+                 header = 0, engine = 'openpyxl', dtype = str)
 
 
 try:
     with engine.connect() as conn:
-        existent_dates = conn.execute(text("""
+        existing_dates = conn.execute(text("""
                         SELECT "Data do Negócio"
                             FROM
-                        b3_raw_ops   
+                        bronze_b3_ops   
                         """)).fetchall()
         
-    existent_dates = np.array(existent_dates).reshape(1, -1)[0]
+    existing_dates = np.array(existing_dates).reshape(1, -1)[0]
     db_exists = True
 
 except:
     print('DB not found')
-    existent_dates = None
+    existing_dates = None
     db_exists = False
 
 
@@ -47,13 +51,18 @@ except:
 
 if db_exists:
     assert len(
-        np.intersect1d(df['Data do Negócio'].values, existent_dates)
+        np.intersect1d(df['Data do Negócio'].values, existing_dates)
         ) == 0, "Your data have insertecting dates within the database - please verify"
 
 
 df['wallet_id'] = id
 
+df = df.astype(str)
 
-df.to_sql('b3_raw_ops', engine, if_exists='append', index = False) # injection
+#%%
+
+df.to_sql('bronze_b3_ops', engine, if_exists='append', 
+            index = False) # injection
+
 print('Data inserted sucessfully')
 

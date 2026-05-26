@@ -6,5 +6,5 @@ sources:
     schema: public
     description: foo databases;
     tables:
-      - name: b3_raw_ops
+      - name: bronze_b3_ops
         description: This table contains the data downloaded by the B3 with the orders that were executed in a raw state;

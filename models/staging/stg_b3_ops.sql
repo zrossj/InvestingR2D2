@@ -1,18 +1,17 @@
 
 with final as (
-    SELECT * FROM {{ source('raw_data_table', 'b3_raw_ops') }}
+    SELECT * FROM {{ source('raw_data_table', 'bronze_b3_ops') }}
 )
 
-SELECT 
-id, 
-"Data do Negócio" as date_op,
-"wallet_id",
-"Tipo de Movimentação" as movement,
-"Mercado" as market,
-"Prazo/Vencimento" as expire_date,
-"Instituição" as brokerage_firm,
-"Código de Negociação" as asset,
-"Quantidade" as quantity, 
-"Preço" as pu,
-"Valor" as value 
+SELECT
+id,
+wallet_id,
+"Entrada/Saída" as movement,
+"Data" as date,  
+"Movimentação" as event_type, 
+"Produto" as asset, 
+"Instituição" as brokerage_firm,  
+"Quantidade" as quantity,
+"Preço unitário" as pu,
+"Valor da Operação" as total_amount
 FROM final

@@ -1,0 +1,15 @@
+investment_wallet:
+  target: local
+  outputs:
+    local:
+      type: postgres
+      host: localhost
+      user: your_user
+      password: your_pass
+      port: 5432 
+      dbname: your_db
+      schema: public
+      threads: 4
+
+
+
